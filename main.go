@@ -20,6 +20,7 @@ var handlers = map[string]commandHandler{
 	"SYST": handleSYST,
 	"PWD":  handlePWD,
 	"TYPE": handleTYPE,
+	"SIZE": handleSIZE,
 	"QUIT": handleQUIT,
 }
 
@@ -55,6 +56,11 @@ func handleTYPE(c client, argv string) error {
 	c.datatype = argv
 	c.conn.Write([]byte("200 Command okay.\r\n"))
 	return nil
+}
+
+func handleSIZE(c client, argv string) error {
+	c.conn.Write([]byte("502 Command not implemented.\r\n"))
+	return c.conn.Close()
 }
 
 func handleQUIT(c client, argv string) error {

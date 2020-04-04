@@ -20,6 +20,7 @@ var handlers = map[string]commandHandler{
 	"SYST": handleSYST,
 	"PWD":  handlePWD,
 	"TYPE": handleTYPE,
+	"QUIT": handleQUIT,
 }
 
 func handleUSER(c client, argv string) error {
@@ -54,6 +55,11 @@ func handleTYPE(c client, argv string) error {
 	c.datatype = argv
 	c.conn.Write([]byte("200 Command okay.\r\n"))
 	return nil
+}
+
+func handleQUIT(c client, argv string) error {
+	c.conn.Write([]byte("221 Service closing control connection.\r\n"))
+	return c.conn.Close()
 }
 
 func handleConnection(conn net.Conn) {

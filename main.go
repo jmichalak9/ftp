@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 type client struct {
@@ -70,10 +71,13 @@ func handleQUIT(c client, argv string) error {
 }
 
 func handleConnection(conn net.Conn) {
+
 	fmt.Println("new connection")
 	c := client{
 		conn: conn,
 	}
+	c.conn.SetDeadline(time.Now().Add(time.Minute))
+	defer c.conn.Close()
 	c.conn.Write([]byte("220 FTP server\r\n"))
 	for {
 		netData, err := bufio.NewReader(c.conn).ReadString('\n')
@@ -92,13 +96,7 @@ func handleConnection(conn net.Conn) {
 		if handler, ok := handlers[cmd]; ok {
 			handler(c, argv)
 		}
-		// Only temporary. TODO: handle connection end.
-		if cmd == "STOP" {
-			break
-		}
-
 	}
-	c.conn.Close()
 }
 
 func main() {

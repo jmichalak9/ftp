@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -47,8 +48,8 @@ func handleSYST(c client, argv string) error {
 }
 
 func handlePWD(c client, argv string) error {
-	//pwd, _ := os.Getwd()
-	c.conn.Write([]byte("217 " + " \r\n"))
+	pwd, _ := os.Getwd()
+	c.conn.Write([]byte("217 " + pwd + "\r\n"))
 	return nil
 }
 

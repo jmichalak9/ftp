@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -65,36 +66,37 @@ func pathToSlice(path string) []string {
 	return strings.Split(normalised, "/")
 }
 
-func getFileFromPath(path string) (string, error) {
+func getItemFromPath(path string) (interface{}, error) {
 	nameslice := pathToSlice(path)
 	searchDir := files
-	for _, v := range nameslice {
-		item, ok := searchDir[v]
+	for _, name := range nameslice {
+		// item is an entry in a filesystem
+		item, ok := searchDir[name]
 		if !ok {
-			continue
+			return "", errors.New("File not found")
 		}
 		if reflect.TypeOf(item).String() == "string" {
 			// item is a file
-			return item.(string), nil
+			return item, nil
 		}
 		if reflect.TypeOf(item).String() == "map[string]interface{}" {
 			// item is a directory
 			searchDir = item.(map[string]interface{})
 			continue
 		}
-		break
+		// item is of unknown type
+		return "", errors.New("unknown entry type in file system")
 	}
-	return "", errors.New("File not found")
+	return searchDir, nil
 }
 
 func handleSIZE(c client, argv string) error {
-	file, err := getFileFromPath(argv)
-	if err != nil {
+	file, err := getItemFromPath(argv)
+	if err != nil || reflect.TypeOf(file).String() != "string" {
 		c.conn.Write([]byte("550 Cannot read file size.\r\n"))
 		return nil
 	}
-	fmt.Println(argv, file)
-	c.conn.Write([]byte("213 " + string(len(file)) + "\r\n"))
+	c.conn.Write([]byte("213 " + strconv.Itoa(len(file.(string))) + "\r\n"))
 	return nil
 }
 

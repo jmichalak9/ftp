@@ -23,6 +23,7 @@ var handlers = map[string]commandHandler{
 	"PASS": handlePASS,
 	"SYST": handleSYST,
 	"PWD":  handlePWD,
+	"CWD":  handleCWD,
 	"TYPE": handleTYPE,
 	"SIZE": handleSIZE,
 	"QUIT": handleQUIT,
@@ -52,6 +53,16 @@ func handleSYST(c client, argv string) error {
 
 func handlePWD(c client, argv string) error {
 	c.conn.Write([]byte("217 /\r\n"))
+	return nil
+}
+
+func handleCWD(c client, argv string) error {
+	file, err := getItemFromPath(argv)
+	if err != nil || reflect.TypeOf(file).String() != "string" {
+		c.conn.Write([]byte("500 file not found\r\n"))
+		return nil
+	}
+	c.conn.Write([]byte("250 OK\r\n"))
 	return nil
 }
 

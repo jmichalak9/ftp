@@ -2,9 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
-	"os"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -49,8 +50,7 @@ func handleSYST(c client, argv string) error {
 }
 
 func handlePWD(c client, argv string) error {
-	pwd, _ := os.Getwd()
-	c.conn.Write([]byte("217 " + pwd + "\r\n"))
+	c.conn.Write([]byte("217 /\r\n"))
 	return nil
 }
 
@@ -60,9 +60,42 @@ func handleTYPE(c client, argv string) error {
 	return nil
 }
 
+func pathToSlice(path string) []string {
+	normalised := strings.TrimPrefix(path, "/")
+	return strings.Split(normalised, "/")
+}
+
+func getFileFromPath(path string) (string, error) {
+	nameslice := pathToSlice(path)
+	searchDir := files
+	for _, v := range nameslice {
+		item, ok := searchDir[v]
+		if !ok {
+			continue
+		}
+		if reflect.TypeOf(item).String() == "string" {
+			// item is a file
+			return item.(string), nil
+		}
+		if reflect.TypeOf(item).String() == "map[string]interface{}" {
+			// item is a directory
+			searchDir = item.(map[string]interface{})
+			continue
+		}
+		break
+	}
+	return "", errors.New("File not found")
+}
+
 func handleSIZE(c client, argv string) error {
-	c.conn.Write([]byte("502 Command not implemented.\r\n"))
-	return c.conn.Close()
+	file, err := getFileFromPath(argv)
+	if err != nil {
+		c.conn.Write([]byte("550 Cannot read file size.\r\n"))
+		return nil
+	}
+	fmt.Println(argv, file)
+	c.conn.Write([]byte("213 " + string(len(file)) + "\r\n"))
+	return nil
 }
 
 func handleQUIT(c client, argv string) error {

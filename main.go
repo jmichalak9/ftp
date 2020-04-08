@@ -15,6 +15,7 @@ type client struct {
 	conn     net.Conn
 	username string
 	datatype string
+	listener net.Listener
 }
 type commandHandler func(client, string) error
 
@@ -26,6 +27,7 @@ var handlers = map[string]commandHandler{
 	"CWD":  handleCWD,
 	"TYPE": handleTYPE,
 	"SIZE": handleSIZE,
+	"PASV": handlePASV,
 	"QUIT": handleQUIT,
 }
 
@@ -59,7 +61,7 @@ func handlePWD(c client, argv string) error {
 func handleCWD(c client, argv string) error {
 	file, err := getItemFromPath(argv)
 	if err != nil || reflect.TypeOf(file).String() != "string" {
-		c.conn.Write([]byte("500 file not found\r\n"))
+		c.conn.Write([]byte("550 file not found\r\n"))
 		return nil
 	}
 	c.conn.Write([]byte("250 OK\r\n"))
@@ -116,15 +118,30 @@ func handleQUIT(c client, argv string) error {
 	return c.conn.Close()
 }
 
-func handleConnection(conn net.Conn) {
+func handlePASV(c client, argv string) error {
+	ip := []int{127, 0, 0, 1}
+	port := c.listener.Addr().(*net.TCPAddr).Port
+	c.conn.Write([]byte(fmt.Sprintf("227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
+		ip[0], ip[1], ip[2], ip[3], port/256, port%256)))
+	return nil
+}
 
-	fmt.Println("new connection")
+func handleConnection(conn net.Conn) {
+	// create additional port to transfer files
+	listener, err := net.Listen("tcp4", ":0")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer listener.Close()
 	c := client{
-		conn: conn,
+		conn:     conn,
+		listener: listener,
 	}
 	c.conn.SetDeadline(time.Now().Add(time.Minute))
 	defer c.conn.Close()
 	c.conn.Write([]byte("220 FTP server\r\n"))
+
 	for {
 		netData, err := bufio.NewReader(c.conn).ReadString('\n')
 		if err != nil {

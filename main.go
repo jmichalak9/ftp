@@ -28,6 +28,7 @@ var handlers = map[string]commandHandler{
 	"TYPE": handleTYPE,
 	"SIZE": handleSIZE,
 	"PASV": handlePASV,
+	"LIST": handleLIST,
 	"QUIT": handleQUIT,
 }
 
@@ -126,6 +127,28 @@ func handlePASV(c client, argv string) error {
 	port := c.listener.Addr().(*net.TCPAddr).Port
 	c.conn.Write([]byte(fmt.Sprintf("227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
 		ip[0], ip[1], ip[2], ip[3], port/256, port%256)))
+	return nil
+}
+
+func handleLIST(c client, argv string) error {
+	conn, err := c.listener.Accept()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	c.conn.Write([]byte("150 File status okay; about to open data connection.\r\n"))
+	dir, err := getItemFromPath("/")
+	if reflect.TypeOf(dir).String() != "map[string]interface {}" || err != nil {
+		// TODO: write error to c.conn
+		return nil
+	}
+	reply := ""
+	for k := range dir.(map[string]interface{}) {
+		reply += ("kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
+	}
+	conn.Write([]byte(reply))
+	conn.Close()
+	c.conn.Write([]byte("226 Closing data connection.\r\n"))
 	return nil
 }
 

@@ -60,7 +60,7 @@ func handlePWD(c client, argv string) error {
 
 func handleCWD(c client, argv string) error {
 	file, err := getItemFromPath(argv)
-	if err != nil || reflect.TypeOf(file).String() != "string" {
+	if err != nil || reflect.TypeOf(file).String() != "map[string]interface {}" {
 		c.conn.Write([]byte("550 file not found\r\n"))
 		return nil
 	}
@@ -82,6 +82,9 @@ func pathToSlice(path string) []string {
 func getItemFromPath(path string) (interface{}, error) {
 	nameslice := pathToSlice(path)
 	searchDir := files
+	if nameslice[0] == "" {
+		return searchDir, nil
+	}
 	for _, name := range nameslice {
 		// item is an entry in a filesystem
 		item, ok := searchDir[name]
@@ -92,7 +95,7 @@ func getItemFromPath(path string) (interface{}, error) {
 			// item is a file
 			return item, nil
 		}
-		if reflect.TypeOf(item).String() == "map[string]interface{}" {
+		if reflect.TypeOf(item).String() == "map[string]interface {}" {
 			// item is a directory
 			searchDir = item.(map[string]interface{})
 			continue

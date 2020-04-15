@@ -14,10 +14,11 @@ import (
 type client struct {
 	conn     net.Conn
 	username string
+	pwd      string
 	datatype string
 	listener net.Listener
 }
-type commandHandler func(client, string) error
+type commandHandler func(*client, string) error
 
 var handlers = map[string]commandHandler{
 	"USER": handleUSER,
@@ -32,7 +33,7 @@ var handlers = map[string]commandHandler{
 	"QUIT": handleQUIT,
 }
 
-func handleUSER(c client, argv string) error {
+func handleUSER(c *client, argv string) error {
 	c.username = argv
 	if argv == "anonymous" {
 		fmt.Println("Logging user anonymous")
@@ -44,32 +45,33 @@ func handleUSER(c client, argv string) error {
 	return nil
 }
 
-func handlePASS(c client, argv string) error {
+func handlePASS(c *client, argv string) error {
 	c.conn.Write([]byte("230 User logged in, proceed\r\n"))
 	return nil
 }
 
-func handleSYST(c client, argv string) error {
+func handleSYST(c *client, argv string) error {
 	c.conn.Write([]byte("215 UNIX Type: L8\r\n"))
 	return nil
 }
 
-func handlePWD(c client, argv string) error {
+func handlePWD(c *client, argv string) error {
 	c.conn.Write([]byte("217 /\r\n"))
 	return nil
 }
 
-func handleCWD(c client, argv string) error {
+func handleCWD(c *client, argv string) error {
 	file, err := getItemFromPath(argv)
 	if err != nil || reflect.TypeOf(file).String() != "map[string]interface {}" {
 		c.conn.Write([]byte("550 file not found\r\n"))
 		return nil
 	}
+	c.pwd = argv
 	c.conn.Write([]byte("250 OK\r\n"))
 	return nil
 }
 
-func handleTYPE(c client, argv string) error {
+func handleTYPE(c *client, argv string) error {
 	c.datatype = argv
 	c.conn.Write([]byte("200 Command okay.\r\n"))
 	return nil
@@ -107,7 +109,7 @@ func getItemFromPath(path string) (interface{}, error) {
 	return searchDir, nil
 }
 
-func handleSIZE(c client, argv string) error {
+func handleSIZE(c *client, argv string) error {
 	file, err := getItemFromPath(argv)
 	if err != nil || reflect.TypeOf(file).String() != "string" {
 		c.conn.Write([]byte("550 Cannot read file size.\r\n"))
@@ -117,12 +119,12 @@ func handleSIZE(c client, argv string) error {
 	return nil
 }
 
-func handleQUIT(c client, argv string) error {
+func handleQUIT(c *client, argv string) error {
 	c.conn.Write([]byte("221 Service closing control connection.\r\n"))
 	return c.conn.Close()
 }
 
-func handlePASV(c client, argv string) error {
+func handlePASV(c *client, argv string) error {
 	ip := []int{127, 0, 0, 1}
 	port := c.listener.Addr().(*net.TCPAddr).Port
 	c.conn.Write([]byte(fmt.Sprintf("227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n",
@@ -130,14 +132,14 @@ func handlePASV(c client, argv string) error {
 	return nil
 }
 
-func handleLIST(c client, argv string) error {
+func handleLIST(c *client, argv string) error {
 	conn, err := c.listener.Accept()
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
 	c.conn.Write([]byte("150 File status okay; about to open data connection.\r\n"))
-	dir, err := getItemFromPath("/")
+	dir, err := getItemFromPath(c.pwd)
 	if reflect.TypeOf(dir).String() != "map[string]interface {}" || err != nil {
 		// TODO: write error to c.conn
 		return nil
@@ -183,7 +185,7 @@ func handleConnection(conn net.Conn) {
 		}
 		cmd, argv := line[0], line[1]
 		if handler, ok := handlers[cmd]; ok {
-			handler(c, argv)
+			handler(&c, argv)
 		}
 	}
 }

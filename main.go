@@ -31,6 +31,7 @@ var handlers = map[string]commandHandler{
 	"PASV": handlePASV,
 	"LIST": handleLIST,
 	"QUIT": handleQUIT,
+	"RETR": handleRETR,
 }
 
 func handleUSER(c *client, argv string) error {
@@ -146,9 +147,29 @@ func handleLIST(c *client, argv string) error {
 	}
 	reply := ""
 	for k := range dir.(map[string]interface{}) {
-		reply += ("kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
+		// TODO: send proper file properties
+		reply += ("-rwxr-xr-x  10 kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
 	}
 	conn.Write([]byte(reply))
+	conn.Close()
+	c.conn.Write([]byte("226 Closing data connection.\r\n"))
+	return nil
+}
+
+func handleRETR(c *client, argv string) error {
+	conn, err := c.listener.Accept()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	c.conn.Write([]byte("150 File status okay; about to open data connection.\r\n"))
+	file, err := getItemFromPath(argv)
+	fmt.Printf("%s %v", argv, file)
+	if reflect.TypeOf(file).String() != "string" || err != nil {
+		// TODO: write error to c.conn
+		return nil
+	}
+	conn.Write([]byte(file.(string)))
 	conn.Close()
 	c.conn.Write([]byte("226 Closing data connection.\r\n"))
 	return nil

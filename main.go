@@ -33,6 +33,7 @@ var handlers = map[string]commandHandler{
 	"QUIT": handleQUIT,
 	"RETR": handleRETR,
 	"FEAT": handleFEAT,
+	"MDTM": handleMDTM,
 }
 
 func handleUSER(c *client, argv string) error {
@@ -132,6 +133,15 @@ func handleFEAT(c *client, argv string) error {
 	return nil
 }
 
+func handleMDTM(c *client, argv string) error {
+	file, err := getItemFromPath(argv)
+	if err != nil || reflect.TypeOf(file).String() != "string" {
+		c.conn.Write([]byte("550 Cannot read file.\r\n"))
+		return nil
+	}
+	c.conn.Write([]byte("213 207001010000\r\n"))
+	return nil
+}
 func handlePASV(c *client, argv string) error {
 	ip := []int{127, 0, 0, 1}
 	port := c.listener.Addr().(*net.TCPAddr).Port

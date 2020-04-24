@@ -32,6 +32,7 @@ var handlers = map[string]commandHandler{
 	"LIST": handleLIST,
 	"QUIT": handleQUIT,
 	"RETR": handleRETR,
+	"FEAT": handleFEAT,
 }
 
 func handleUSER(c *client, argv string) error {
@@ -123,6 +124,12 @@ func handleSIZE(c *client, argv string) error {
 func handleQUIT(c *client, argv string) error {
 	c.conn.Write([]byte("221 Service closing control connection.\r\n"))
 	return c.conn.Close()
+}
+
+func handleFEAT(c *client, argv string) error {
+	c.conn.Write([]byte("211-Features:\r\n" +
+		"211 End\r\n"))
+	return nil
 }
 
 func handlePASV(c *client, argv string) error {

@@ -22,7 +22,7 @@ type client struct {
 
 // Server represents an FTP server
 type Server struct {
-	addr string
+	Addr string
 }
 
 type commandHandler func(*client, string) error
@@ -235,11 +235,13 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
+// ListenAndServe listens on a TCP address and handles incoming
+// connections.
 func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("tcp4", s.addr)
+	l, err := net.Listen("tcp4", s.Addr)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return err
 	}
 	defer l.Close()
 
@@ -247,7 +249,7 @@ func (s *Server) ListenAndServe() error {
 		c, err := l.Accept()
 		if err != nil {
 			fmt.Println(err)
-			return
+			return err
 		}
 		go handleConnection(c)
 	}

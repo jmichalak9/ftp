@@ -2,11 +2,11 @@ package ftp
 
 // This represents a basic file system. Values can be either files or
 // directory names.
-var files = map[string]interface{}{
-	"test": "Test file",
-	"asdf": "asdf file",
-	"dir": map[string]interface{}{
-		"file1": "file1",
-		"file2": "file2",
-	},
-}
+var files = Directory(map[string]interface{}{
+	"test": File("Test file"),
+	"asdf": File("asdf file"),
+	"dir": Directory(map[string]interface{}{
+		"file1": File("file1"),
+		"file2": File("file2"),
+	}),
+})

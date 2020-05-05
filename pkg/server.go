@@ -29,6 +29,12 @@ type client struct {
 
 type commandHandler func(*client, string) error
 
+// File represents file content in a virtual file system.
+type File string
+
+// Directory represents a directory in a virtual file system.
+type Directory map[string]interface{}
+
 var handlers = map[string]commandHandler{
 	"CWD":  handleCWD,
 	"FEAT": handleFEAT,
@@ -48,8 +54,8 @@ var handlers = map[string]commandHandler{
 var eol = "\r\n"
 
 func handleCWD(c *client, argv string) error {
-	file, err := getItemFromPath(argv)
-	if err != nil || reflect.TypeOf(file).String() != "map[string]interface {}" {
+	_, err := getDirFromPath(argv)
+	if err != nil {
 		c.conn.Write([]byte(ReplyFileUnavailable + eol))
 		return err
 	}
@@ -67,17 +73,16 @@ func handleFEAT(c *client, argv string) error {
 func handleLIST(c *client, argv string) error {
 	conn, err := c.dataSock.Accept()
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 	c.conn.Write([]byte(ReplyFileStatusOK + eol))
-	dir, err := getItemFromPath(c.pwd)
-	if reflect.TypeOf(dir).String() != "map[string]interface {}" || err != nil {
+	dir, err := getDirFromPath(c.pwd)
+	if err != nil {
 		// TODO: write error to c.conn
 		return nil
 	}
 	reply := ""
-	for k := range dir.(map[string]interface{}) {
+	for k := range dir {
 		// TODO: send proper file properties
 		reply += ("-rwxr-xr-x  10 kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
 	}
@@ -88,8 +93,8 @@ func handleLIST(c *client, argv string) error {
 }
 
 func handleMDTM(c *client, argv string) error {
-	file, err := getItemFromPath(argv)
-	if err != nil || reflect.TypeOf(file).String() != "string" {
+	_, err := getFileFromPath(argv)
+	if err != nil {
 		c.conn.Write([]byte(ReplyFileUnavailable + eol))
 		return err
 	}
@@ -123,31 +128,30 @@ func handleQUIT(c *client, argv string) error {
 
 func handleRETR(c *client, argv string) error {
 	conn, err := c.dataSock.Accept()
+	defer conn.Close()
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 	c.conn.Write([]byte(ReplyFileStatusOK + eol))
-	file, err := getItemFromPath(argv)
-	fmt.Printf("%s %v", argv, file)
-	if reflect.TypeOf(file).String() != "string" || err != nil {
+	file, err := getFileFromPath(argv)
+	if err != nil {
 		// TODO: write error to c.conn
 		return nil
 	}
-	conn.Write([]byte(file.(string)))
+	conn.Write([]byte(file))
 	conn.Close()
 	c.conn.Write([]byte(ReplyClosingDataConn + eol))
 	return nil
 }
 
 func handleSIZE(c *client, argv string) error {
-	file, err := getItemFromPath(argv)
-	if err != nil || reflect.TypeOf(file).String() != "string" {
+	file, err := getFileFromPath(argv)
+	if err != nil {
 		c.conn.Write([]byte(ReplyFileUnavailable + eol))
 		return nil
 	}
 	_, err = c.conn.Write([]byte(
-		fmt.Sprintf(ReplyFileStatus, strconv.Itoa(len(file.(string)))) + eol))
+		fmt.Sprintf(ReplyFileStatus, strconv.Itoa(len(file))) + eol))
 	return err
 }
 
@@ -187,19 +191,39 @@ func getItemFromPath(path string) (interface{}, error) {
 		if !ok {
 			return "", errors.New("File not found")
 		}
-		if reflect.TypeOf(item).String() == "string" {
-			// item is a file
-			return item, nil
-		}
-		if reflect.TypeOf(item).String() == "map[string]interface {}" {
-			// item is a directory
-			searchDir = item.(map[string]interface{})
+		switch t := item.(type) {
+		case File:
+			return item.(File), nil
+		case Directory:
+			searchDir = item.(Directory)
 			continue
+		default:
+			return nil, errors.New("unknown type: " + reflect.TypeOf(t).String())
 		}
-		// item is of unknown type
-		return "", errors.New("unknown entry type in file system")
 	}
 	return searchDir, nil
+}
+
+func getFileFromPath(path string) (File, error) {
+	item, err := getItemFromPath(path)
+	if err != nil {
+		return "", err
+	}
+	if file, ok := item.(File); ok {
+		return file, nil
+	}
+	return "", errors.New("not a file")
+}
+
+func getDirFromPath(path string) (Directory, error) {
+	item, err := getItemFromPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if dir, ok := item.(Directory); ok {
+		return dir, nil
+	}
+	return nil, errors.New("not a directory")
 }
 
 // handleConnection handles a connection with an individual client.
@@ -207,7 +231,6 @@ func handleConnection(conn net.Conn) {
 	// Open additional port for data connection.
 	dataSock, err := net.Listen("tcp4", ":0")
 	if err != nil {
-		fmt.Println(err)
 		return
 	}
 	defer dataSock.Close()
@@ -223,7 +246,6 @@ func handleConnection(conn net.Conn) {
 	for {
 		netData, err := bufio.NewReader(c.conn).ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
 			return
 		}
 		fmt.Print(string(netData))

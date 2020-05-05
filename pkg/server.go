@@ -20,7 +20,8 @@ type client struct {
 	listener net.Listener
 }
 
-type server struct {
+// Server represents an FTP server
+type Server struct {
 	addr string
 }
 

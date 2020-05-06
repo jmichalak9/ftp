@@ -27,7 +27,7 @@ type client struct {
 	toClose  bool
 }
 
-type commandHandler func(*client, string) error
+type commandHandler func(*client, string) string
 
 // File represents file content in a virtual file system.
 type File string
@@ -53,123 +53,108 @@ var handlers = map[string]commandHandler{
 
 var eol = "\r\n"
 
-func handleCWD(c *client, argv string) error {
+func handleCWD(c *client, argv string) string {
 	_, err := getDirFromPath(argv)
 	if err != nil {
-		c.conn.Write([]byte(ReplyFileUnavailable + eol))
-		return err
+		return ReplyFileUnavailable + eol
 	}
 	c.pwd = argv
-	_, err = c.conn.Write([]byte(ReplyFileActionOK + eol))
-	return err
+	return ReplyFileActionOK + eol
 }
 
-func handleFEAT(c *client, argv string) error {
-	_, err := c.conn.Write([]byte("211-Features:\r\n" +
-		"211 End\r\n"))
-	return err
+func handleFEAT(c *client, argv string) string {
+	return "211-Features:" + eol +
+		"211 End" + eol
 }
 
-func handleLIST(c *client, argv string) error {
-	conn, err := c.dataSock.Accept()
+func handleLIST(c *client, argv string) string {
+	dataConn, err := c.dataSock.Accept()
 	if err != nil {
-		return err
+		return ReplyCannotOpenDataConn + eol
 	}
+	defer dataConn.Close()
 	c.conn.Write([]byte(ReplyFileStatusOK + eol))
 	dir, err := getDirFromPath(c.pwd)
 	if err != nil {
-		// TODO: write error to c.conn
-		return nil
+		return ReplyActionAborted + eol
 	}
 	reply := ""
-	for k := range dir {
+	for k, v := range dir {
 		// TODO: send proper file properties
-		reply += ("-rwxr-xr-x  10 kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
+		switch v.(type) {
+		case Directory:
+			reply += ("drwxr-xr-x  10 kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
+		case File:
+			reply += ("-rwxr-xr-x  10 kuba wheel 776 Nov 24 15:50 " + k + "\r\n")
+		}
 	}
-	conn.Write([]byte(reply))
-	conn.Close()
-	c.conn.Write([]byte(ReplyClosingDataConn + eol))
-	return nil
+	dataConn.Write([]byte(reply))
+	return ReplyClosingDataConn + eol
 }
 
-func handleMDTM(c *client, argv string) error {
+func handleMDTM(c *client, argv string) string {
 	_, err := getFileFromPath(argv)
 	if err != nil {
-		c.conn.Write([]byte(ReplyFileUnavailable + eol))
-		return err
+		return ReplyFileUnavailable + eol
 	}
-	_, err = c.conn.Write([]byte("213 207001010000\r\n"))
-	return err
+	return "213 207001010000" + eol
 }
 
-func handlePASS(c *client, argv string) error {
-	_, err := c.conn.Write([]byte(ReplyUserLoggedIn + eol))
-	return err
+func handlePASS(c *client, argv string) string {
+	return ReplyUserLoggedIn + eol
 }
 
-func handlePASV(c *client, argv string) error {
+func handlePASV(c *client, argv string) string {
 	ip := []int{127, 0, 0, 1}
 	port := c.dataSock.Addr().(*net.TCPAddr).Port
-	_, err := c.conn.Write([]byte(fmt.Sprintf(ReplyEnteringPasv,
-		ip[0], ip[1], ip[2], ip[3], port/256, port%256) + eol))
-	return err
+	return fmt.Sprintf(ReplyEnteringPasv,
+		ip[0], ip[1], ip[2], ip[3], port/256, port%256) + eol
 }
 
-func handlePWD(c *client, argv string) error {
-	_, err := c.conn.Write([]byte(fmt.Sprintf(ReplyPathNameOK, c.pwd) + eol))
-	return err
+func handlePWD(c *client, argv string) string {
+	return fmt.Sprintf(ReplyPathNameOK, c.pwd) + eol
 }
 
-func handleQUIT(c *client, argv string) error {
+func handleQUIT(c *client, argv string) string {
 	c.toClose = true
-	_, err := c.conn.Write([]byte(ReplyClosingConn + eol))
-	return err
+	return ReplyClosingConn + eol
 }
 
-func handleRETR(c *client, argv string) error {
-	conn, err := c.dataSock.Accept()
-	defer conn.Close()
+func handleRETR(c *client, argv string) string {
+	dataConn, err := c.dataSock.Accept()
 	if err != nil {
-		return err
+		return ReplyCannotOpenDataConn + eol
 	}
+	defer dataConn.Close()
 	c.conn.Write([]byte(ReplyFileStatusOK + eol))
 	file, err := getFileFromPath(argv)
 	if err != nil {
-		// TODO: write error to c.conn
-		return nil
+		return ReplyActionAborted + eol
 	}
-	conn.Write([]byte(file))
-	conn.Close()
-	c.conn.Write([]byte(ReplyClosingDataConn + eol))
-	return nil
+	dataConn.Write([]byte(file))
+	return ReplyClosingDataConn + eol
 }
 
-func handleSIZE(c *client, argv string) error {
+func handleSIZE(c *client, argv string) string {
 	file, err := getFileFromPath(argv)
 	if err != nil {
-		c.conn.Write([]byte(ReplyFileUnavailable + eol))
-		return nil
+		return ReplyFileUnavailable + eol
 	}
-	_, err = c.conn.Write([]byte(
-		fmt.Sprintf(ReplyFileStatus, strconv.Itoa(len(file))) + eol))
-	return err
+	return fmt.Sprintf(ReplyFileStatus, strconv.Itoa(len(file))) + eol
 }
 
-func handleSYST(c *client, argv string) error {
-	_, err := c.conn.Write([]byte(ReplySystemType + eol))
-	return err
+func handleSYST(c *client, argv string) string {
+	return ReplySystemType + eol
 }
 
-func handleUSER(c *client, argv string) error {
+func handleUSER(c *client, argv string) string {
 	c.username = argv
-	_, err := c.conn.Write([]byte(ReplyUserNameOK + eol))
-	return err
+	return ReplyUserNameOK + eol
 }
 
-func handleTYPE(c *client, argv string) error {
+func handleTYPE(c *client, argv string) string {
 	c.datatype = argv
-	_, err := c.conn.Write([]byte(ReplyCmdOK + eol))
-	return err
+	return ReplyCmdOK + eol
 }
 
 // pathToSlice slices a path string to a slice of strings.
@@ -187,6 +172,9 @@ func getItemFromPath(path string) (interface{}, error) {
 	}
 	for _, name := range nameslice {
 		// item is an entry in a filesystem
+		if name == "" || name == "." {
+			continue
+		}
 		item, ok := searchDir[name]
 		if !ok {
 			return "", errors.New("File not found")
@@ -257,7 +245,7 @@ func handleConnection(conn net.Conn) {
 		}
 		cmd, argv := line[0], line[1]
 		if handler, ok := handlers[cmd]; ok {
-			handler(&c, argv)
+			c.conn.Write([]byte(handler(&c, argv)))
 		} else {
 			c.conn.Write([]byte(ReplyNotImplemented + eol))
 		}
